@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SSH Paste Generator</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --panel: #111827;
+        --panel-alt: #1f2937;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+        --accent: #22c55e;
+        --accent-2: #38bdf8;
+        --border: #374151;
+        --shadow: rgba(15, 23, 42, 0.35);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: linear-gradient(135deg, #020817, var(--bg));
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .app {
+        width: min(1100px, 100%);
+        background: rgba(17, 24, 39, 0.9);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        box-shadow: 0 20px 40px var(--shadow);
+        overflow: hidden;
+      }
+
+      .header {
+        padding: 18px 24px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(31, 41, 55, 0.7);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.5rem, 2vw, 2rem);
+      }
+
+      .content {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+        padding: 24px;
+      }
+
+      .panel {
+        background: rgba(15, 23, 42, 0.7);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+      }
+
+      .field {
+        margin-bottom: 14px;
+      }
+
+      .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .checkbox-row input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--accent);
+      }
+
+      label {
+        display: block;
+        font-weight: 700;
+        margin-bottom: 10px;
+        color: var(--text);
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #020817;
+        color: var(--text);
+        padding: 14px;
+        font: 14px/1.5 "SFMono-Regular", Consolas, monospace;
+      }
+
+      input {
+        min-height: 48px;
+      }
+
+      textarea {
+        min-height: 320px;
+        resize: vertical;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      button {
+        border: none;
+        border-radius: 10px;
+        padding: 11px 16px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 0.15s ease, opacity 0.15s ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+      }
+
+      .primary {
+        background: var(--accent);
+        color: #06220d;
+      }
+
+      .secondary {
+        background: var(--accent-2);
+        color: #082438;
+      }
+
+      .muted {
+        background: #334155;
+        color: var(--text);
+      }
+
+      .hint {
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 0.96rem;
+        line-height: 1.5;
+      }
+
+      .code-output {
+        min-height: 320px;
+        background: #020817;
+      }
+
+      @media (max-width: 820px) {
+        .content {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <div class="header">
+        <h1>SSH paste generator</h1>
+      </div>
+
+      <div class="content">
+        <div class="panel">
+          <div class="field">
+            <label for="filename">Jméno souboru</label>
+            <input id="filename" type="text" value="ahoj.txt" spellcheck="false" />
+          </div>
+
+          <div class="field">
+            <label for="input">Vlož celý skript</label>
+            <textarea id="input" spellcheck="false">petr
+admin
+hello world
+</textarea>
+          </div>
+
+          <div class="checkbox-row">
+            <input id="shebang" type="checkbox" checked />
+            <label for="shebang" style="margin: 0; display: inline-block;">Přidat #!/bin/sh</label>
+          </div>
+
+          <div class="actions">
+            <button id="generate" class="primary">Vygenerovat</button>
+            <button id="clear" class="muted">Vymazat</button>
+          </div>
+
+          <div class="hint">
+            Vložíš jen text, jeden řádek = jeden echo. Název souboru se nastavuje nahoře.
+          </div>
+        </div>
+
+        <div class="panel">
+          <label for="output">Připravené echo commandy</label>
+          <textarea id="output" class="code-output" readonly spellcheck="false"></textarea>
+
+          <div class="actions">
+            <button id="copy" class="secondary">Kopírovat</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const input = document.getElementById('input');
+      const output = document.getElementById('output');
+      const filename = document.getElementById('filename');
+      const shebang = document.getElementById('shebang');
+
+      function shellQuote(value) {
+        return `'${String(value).replace(/'/g, "'\\''")}'`;
+      }
+
+      function generateCommands(text, fileName, includeShebang) {
+        const lines = text.split(/\r?\n/);
+        const commands = [];
+        const target = (fileName || 'output.txt').trim() || 'output.txt';
+
+        if (includeShebang) {
+          commands.push(`echo '#!/bin/sh' >> ${target}`);
+        }
+
+        lines.forEach((line) => {
+          const trimmed = line.trim();
+
+          const safeValue = shellQuote(trimmed);
+          commands.push(`echo ${safeValue} >> ${target}`);
+        });
+
+        return commands.join('\n');
+      }
+
+      function updateOutput() {
+        output.value = generateCommands(input.value, filename.value, shebang.checked);
+      }
+
+      document.getElementById('generate').addEventListener('click', updateOutput);
+      input.addEventListener('input', updateOutput);
+      filename.addEventListener('input', updateOutput);
+      shebang.addEventListener('change', updateOutput);
+
+      document.getElementById('clear').addEventListener('click', () => {
+        input.value = '';
+        filename.value = 'ahoj.txt';
+        shebang.checked = true;
+        output.value = '';
+        input.focus();
+      });
+
+      document.getElementById('copy').addEventListener('click', async () => {
+        if (!output.value.trim()) return;
+
+        try {
+          await navigator.clipboard.writeText(output.value);
+          document.getElementById('copy').textContent = 'Zkopírováno';
+          setTimeout(() => {
+            document.getElementById('copy').textContent = 'Kopírovat';
+          }, 1200);
+        } catch (error) {
+          output.select();
+          document.execCommand('copy');
+        }
+      });
+
+      updateOutput();
+    </script>
+  </body>
+</html>
