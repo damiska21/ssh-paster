@@ -275,7 +275,7 @@
       });
       document.getElementById('copy2').addEventListener('click', async () => {
         try {
-          await navigator.clipboard.writeText("cat << 'EOF' >");
+          await navigator.clipboard.writeText("cat << 'EOF' > " + filename.value);
           document.getElementById('copy2').textContent = 'Máš ho tam >:)';
           setTimeout(() => {
             document.getElementById('copy2').textContent = 'Kopírovat tríček';
